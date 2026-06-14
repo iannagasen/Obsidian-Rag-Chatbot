@@ -1,0 +1,268 @@
+{
+  "name": "Qdrant Ingestion Workflow",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -336,
+        48
+      ],
+      "id": "50705645-ae6d-484a-abe3-6d83b5ba658c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "fileSelector": "/data/vault/04. Career Skills/AWS/**/*.md",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.readWriteFile",
+      "typeVersion": 1.1,
+      "position": [
+        -128,
+        48
+      ],
+      "id": "49f51c3c-0699-404d-8bae-8a76f92e49c6",
+      "name": "Read Markdown files"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9c5239c4-acc0-4688-bde3-8b8d46cb1a00",
+              "leftValue": "={{ $binary.data.directory }}",
+              "rightValue": ".obsidian",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "088be571-c8b3-4cb9-8a16-6ce8fd4bd846",
+              "leftValue": "={{ $binary.data.directory }}",
+              "rightValue": ".trash",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "80f862f6-e4d7-4032-8be8-c4089b08f8de",
+              "leftValue": "={{ $binary.data.directory }}",
+              "rightValue": "Personal",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "6acfb95f-edfc-4840-81bc-61520668e7ef",
+              "leftValue": "={{ $binary.data.directory }}",
+              "rightValue": ".agent",
+              "operator": {
+                "type": "string",
+                "operation": "notContains"
+              }
+            },
+            {
+              "id": "5982e501-c3b8-448e-88de-72c237c4717b",
+              "leftValue": "",
+              "rightValue": "",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "looseTypeValidation": "=",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        16,
+        48
+      ],
+      "id": "b0e1aa71-889e-4c51-8329-1bc98018be43",
+      "name": "Is not sensitive info"
+    },
+    {
+      "parameters": {
+        "mode": "insert",
+        "qdrantCollection": {
+          "__rl": true,
+          "value": "obsidian_vault",
+          "mode": "list",
+          "cachedResultName": "obsidian_vault"
+        },
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.vectorStoreQdrant",
+      "typeVersion": 1.3,
+      "position": [
+        224,
+        32
+      ],
+      "id": "08ce29f8-094f-40a9-a01d-45c3ed7accfd",
+      "name": "Qdrant Vector Store",
+      "credentials": {
+        "qdrantApi": {
+          "id": "RBmfuo8Zt6ZuSgAc",
+          "name": "Qdrant account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "nomic-embed-text:latest"
+      },
+      "type": "@n8n/n8n-nodes-langchain.embeddingsOllama",
+      "typeVersion": 1,
+      "position": [
+        224,
+        224
+      ],
+      "id": "55f1b2fb-7462-4f8f-931d-0d291d547ba7",
+      "name": "Embeddings Ollama",
+      "credentials": {
+        "ollamaApi": {
+          "id": "JRB8KgCd2ZytSuxv",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "dataType": "binary",
+        "loader": "textLoader",
+        "textSplittingMode": "custom",
+        "options": {
+          "metadata": {
+            "metadataValues": [
+              {
+                "name": "source",
+                "value": "={{ $('Read Markdown files').item.binary.data.directory + '/' + $('Read Markdown files').item.binary.data.fileName }}"
+              }
+            ]
+          }
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.documentDefaultDataLoader",
+      "typeVersion": 1.1,
+      "position": [
+        384,
+        224
+      ],
+      "id": "bff606f8-6106-404d-9ff0-815cad3b1e49",
+      "name": "Default Data Loader"
+    },
+    {
+      "parameters": {
+        "chunkOverlap": 200,
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.textSplitterRecursiveCharacterTextSplitter",
+      "typeVersion": 1,
+      "position": [
+        384,
+        400
+      ],
+      "id": "5e31f4f6-9315-4a4b-ba70-905b0e085647",
+      "name": "Recursive Character Text Splitter"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "Read Markdown files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Read Markdown files": {
+      "main": [
+        [
+          {
+            "node": "Is not sensitive info",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is not sensitive info": {
+      "main": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Embeddings Ollama": {
+      "ai_embedding": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_embedding",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Default Data Loader": {
+      "ai_document": [
+        [
+          {
+            "node": "Qdrant Vector Store",
+            "type": "ai_document",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Recursive Character Text Splitter": {
+      "ai_textSplitter": [
+        [
+          {
+            "node": "Default Data Loader",
+            "type": "ai_textSplitter",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": false
+  },
+  "versionId": "bf1bf501-5493-45c7-b44a-6a5c490c9675",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "7d91b432c515ccae341c944b1072f0eb078151c96e85ea2b757cc9c5287a6414"
+  },
+  "nodeGroups": [],
+  "id": "8eDm7Z346HWPqS3w",
+  "tags": []
+}

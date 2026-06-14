@@ -8,12 +8,18 @@ services:
     environment:
       - N8N_SECURE_COOKIE=false
       - GENERIC_TIMEZONE=Asia/Manila
+      - N8N_RESTRICT_FILE_ACCESS_TO=/data/vault
     volumes:
       - n8n_data:/home/node/.n8n
       - /mnt/c/ObsidianVault/MyKnowledgeVault:/data/vault:ro
     depends_on:
       - qdrant
       - ollama
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:5678/healthz || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   qdrant:
     image: qdrant/qdrant:latest
@@ -24,6 +30,25 @@ services:
       - "6334:6334"
     volumes:
       - qdrant_data:/qdrant/storage
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  qdrant-init:
+    image: curlimages/curl:latest
+    container_name: qdrant-init
+    restart: "no"
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        curl -s -X PUT http://qdrant:6333/collections/obsidian_vault \
+          -H 'Content-Type: application/json' \
+          -d '{"vectors": {"size": 768, "distance": "Cosine"}}'
 
   ollama:
     image: ollama/ollama:latest
@@ -33,6 +58,71 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+  ollama-init:
+    image: ollama/ollama:latest
+    container_name: ollama-init
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+    entrypoint: ["sh", "-c"]
+    command:
+      - |
+        ollama pull nomic-embed-text
+        ollama pull llama3.1:8b
+
+  status-check:
+    image: alpine:latest
+    container_name: status-check
+    restart: "no"
+    depends_on:
+      n8n:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+      qdrant-init:
+        condition: service_completed_successfully
+      ollama-init:
+        condition: service_completed_successfully
+    command:
+      - sh
+      - -c
+      - |
+        PASS=true
+
+        wget -qO- http://qdrant:6333/collections/obsidian_vault | grep -q '"green"' \
+          && echo "[OK]   qdrant collection obsidian_vault exists" \
+          || { echo "[FAIL] qdrant collection obsidian_vault not found"; PASS=false; }
+
+        wget -qO- http://ollama:11434/api/tags | grep -q 'nomic-embed-text' \
+          && echo "[OK]   ollama model nomic-embed-text installed" \
+          || { echo "[FAIL] ollama model nomic-embed-text not found"; PASS=false; }
+
+        wget -qO- http://ollama:11434/api/tags | grep -q 'llama3.1' \
+          && echo "[OK]   ollama model llama3.1:8b installed" \
+          || { echo "[FAIL] ollama model llama3.1:8b not found"; PASS=false; }
+
+        if [ "$PASS" = "true" ]; then
+          echo "-----------------------------"
+          echo "  RAG stack is ready"
+          echo "  n8n    -> http://localhost:5678"
+          echo "  qdrant -> http://localhost:6333/dashboard"
+          echo "  ollama -> http://localhost:11434"
+          echo "-----------------------------"
+        else
+          echo "One or more checks failed — see above."
+          exit 1
+        fi
 
 volumes:
   n8n_data:
